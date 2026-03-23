@@ -779,7 +779,7 @@ export default function HomeInfusionRevenueDashboard() {
                 <Input placeholder="Claim ID, drug, payor, denial reason..." value={search} onChange={(e) => setSearch(e.target.value)} className="rounded-xl border-slate-200 bg-white" />
               </div>
             </div>
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               <MultiSelectFilter label="Payor" options={options.payors} selected={filters.payors} onToggle={(v) => toggleFilter("payors", v)} onClear={() => setFilters((p) => ({ ...p, payors: [] }))} />
               <MultiSelectFilter label="Therapy Class" options={options.therapyClasses} selected={filters.therapyClasses} onToggle={(v) => toggleFilter("therapyClasses", v)} onClear={() => setFilters((p) => ({ ...p, therapyClasses: [] }))} />
               <MultiSelectFilter label="Drug Name" options={options.drugNames} selected={filters.drugNames} onToggle={(v) => toggleFilter("drugNames", v)} onClear={() => setFilters((p) => ({ ...p, drugNames: [] }))} />
@@ -807,7 +807,7 @@ export default function HomeInfusionRevenueDashboard() {
             <DollarSign className="h-4 w-4 text-slate-500" />
             <h2 className="text-lg font-semibold text-slate-900">Revenue Cycle Performance</h2>
           </div>
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-8">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <KpiCard title="Clean Claim Rate" value={percent(kpis.cleanClaimRate)} accent="from-blue-600 to-cyan-500" />
             <KpiCard title="Initial Denial Rate" value={percent(kpis.initialDenialRate)} accent="from-rose-500 to-red-600" />
             <KpiCard title="First Pass Resolution" value={percent(kpis.firstPassResolutionRate)} accent="from-indigo-500 to-violet-600" />
