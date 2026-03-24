@@ -779,7 +779,7 @@ export default function HomeInfusionRevenueDashboard() {
                 <Input placeholder="Claim ID, drug, payor, denial reason..." value={search} onChange={(e) => setSearch(e.target.value)} className="rounded-xl border-slate-200 bg-white" />
               </div>
             </div>
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               <MultiSelectFilter label="Payor" options={options.payors} selected={filters.payors} onToggle={(v) => toggleFilter("payors", v)} onClear={() => setFilters((p) => ({ ...p, payors: [] }))} />
               <MultiSelectFilter label="Therapy Class" options={options.therapyClasses} selected={filters.therapyClasses} onToggle={(v) => toggleFilter("therapyClasses", v)} onClear={() => setFilters((p) => ({ ...p, therapyClasses: [] }))} />
               <MultiSelectFilter label="Drug Name" options={options.drugNames} selected={filters.drugNames} onToggle={(v) => toggleFilter("drugNames", v)} onClear={() => setFilters((p) => ({ ...p, drugNames: [] }))} />
@@ -807,7 +807,7 @@ export default function HomeInfusionRevenueDashboard() {
             <DollarSign className="h-4 w-4 text-slate-500" />
             <h2 className="text-lg font-semibold text-slate-900">Revenue Cycle Performance</h2>
           </div>
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-8">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <KpiCard title="Clean Claim Rate" value={percent(kpis.cleanClaimRate)} accent="from-blue-600 to-cyan-500" />
             <KpiCard title="Initial Denial Rate" value={percent(kpis.initialDenialRate)} accent="from-rose-500 to-red-600" />
             <KpiCard title="First Pass Resolution" value={percent(kpis.firstPassResolutionRate)} accent="from-indigo-500 to-violet-600" />
@@ -955,16 +955,16 @@ export default function HomeInfusionRevenueDashboard() {
           </CardContent>
         </Card>
 
-        <Card className="rounded-3xl shadow-sm">
+        <Card className="rounded-[28px] border-0 bg-white/90 shadow-[0_12px_40px_rgba(15,23,42,0.08)] backdrop-blur">
           <CardHeader>
             <CardTitle className="text-lg">Denials Analysis</CardTitle>
           </CardHeader>
           <CardContent>
             <Tabs defaultValue="payor">
-              <TabsList className="grid w-full grid-cols-3 rounded-2xl">
-                <TabsTrigger value="payor">By Payor</TabsTrigger>
-                <TabsTrigger value="therapy">By Therapy Class</TabsTrigger>
-                <TabsTrigger value="drug">By Drug Name</TabsTrigger>
+              <TabsList className="grid w-full grid-cols-3 rounded-2xl bg-slate-100/80 p-1">
+                <TabsTrigger value="payor" className="rounded-xl">By Payor</TabsTrigger>
+                <TabsTrigger value="therapy" className="rounded-xl">By Therapy Class</TabsTrigger>
+                <TabsTrigger value="drug" className="rounded-xl">By Drug Name</TabsTrigger>
               </TabsList>
               <TabsContent value="payor" className="mt-4">
                 <DenialTable rows={denialByPayor} activeValue={selectedViz.payor} onSelect={(value) => setSelectedViz((p) => ({ ...p, payor: value }))} sortConfig={denialSort} onSort={handleSortChange(setDenialSort)} />
@@ -979,7 +979,7 @@ export default function HomeInfusionRevenueDashboard() {
           </CardContent>
         </Card>
 
-        <Card className="rounded-3xl shadow-sm">
+        <Card className="rounded-[28px] border-0 bg-white/90 shadow-[0_12px_40px_rgba(15,23,42,0.08)] backdrop-blur">
           <CardHeader>
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <CardTitle className="text-lg">Master Detail Table</CardTitle>
