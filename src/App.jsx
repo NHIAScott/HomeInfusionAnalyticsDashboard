@@ -518,6 +518,7 @@ export default function HomeInfusionRevenueDashboard() {
   });
   const [activeTherapyClassLegend, setActiveTherapyClassLegend] = useState(null);
   const [hoveredTherapyClassLegend, setHoveredTherapyClassLegend] = useState(null);
+  const [hiddenMonthlySeries, setHiddenMonthlySeries] = useState([]);
   const [summarySort, setSummarySort] = useState({ key: "collections", direction: "desc" });
   const [denialSort, setDenialSort] = useState({ key: "denialRate", direction: "desc" });
   const [detailSort, setDetailSort] = useState({ key: "date_of_service", direction: "desc" });
@@ -798,6 +799,11 @@ export default function HomeInfusionRevenueDashboard() {
     });
     return Array.from(byMonth.values()).sort((a, b) => a.month.localeCompare(b.month));
   }, [filteredBase]);
+
+  const visibleMonthlySeries = useMemo(
+    () => MONTHLY_SERIES.filter((series) => !hiddenMonthlySeries.includes(series.key)),
+    [hiddenMonthlySeries]
+  );
 
   const handleFile = (file) => {
     if (!file) return;
@@ -1102,7 +1108,7 @@ export default function HomeInfusionRevenueDashboard() {
                   <Tooltip
                     content={({ active, payload, label }) => {
                       if (!active || !payload?.length) return null;
-                      const ordered = MONTHLY_SERIES
+                      const ordered = visibleMonthlySeries
                         .map((series) => ({
                           ...series,
                           value: payload.find((item) => item.dataKey === series.key)?.value,
@@ -1123,12 +1129,33 @@ export default function HomeInfusionRevenueDashboard() {
                     }}
                   />
                   <Legend
-                    payload={MONTHLY_SERIES.map((series) => ({
-                      value: series.label,
-                      id: series.key,
-                      type: "line",
-                      color: series.color,
-                    }))}
+                    content={() => (
+                      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm">
+                        {MONTHLY_SERIES.map((series) => {
+                          const hidden = hiddenMonthlySeries.includes(series.key);
+                          return (
+                            <button
+                              key={series.key}
+                              type="button"
+                              onClick={() =>
+                                setHiddenMonthlySeries((prev) =>
+                                  prev.includes(series.key)
+                                    ? prev.filter((k) => k !== series.key)
+                                    : [...prev, series.key]
+                                )
+                              }
+                              className={`inline-flex items-center gap-2 ${hidden ? "text-slate-400" : "text-slate-700"}`}
+                            >
+                              <span
+                                className={`inline-block h-2.5 w-2.5 rounded-full ${hidden ? "opacity-40" : ""}`}
+                                style={{ backgroundColor: series.color }}
+                              />
+                              <span className={hidden ? "line-through" : ""}>{series.label}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
                   />
                   {MONTHLY_SERIES.map((series) => (
                     <Line
@@ -1140,6 +1167,7 @@ export default function HomeInfusionRevenueDashboard() {
                       strokeWidth={2.5}
                       dot={series.showDots ? { r: 3 } : false}
                       activeDot={series.showDots ? { r: 6 } : false}
+                      hide={hiddenMonthlySeries.includes(series.key)}
                       onClick={(point) => setSelectedViz((p) => ({ ...p, monthYear: p.monthYear === point.month ? null : point.month }))}
                     />
                   ))}
