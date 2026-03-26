@@ -52,6 +52,14 @@ const THERAPY_CLASS_COLORS = {
   Unknown: "#64748b",
 };
 
+const MONTHLY_SERIES = [
+  { key: "expected", label: "Expected (Allowed Amount)", color: "#4f46e5", showDots: true },
+  { key: "insurerPaid", label: "Insurer Paid", color: "#059669", showDots: false },
+  { key: "patientResponsibility", label: "Patient Responsibility", color: "#f59e0b", showDots: false },
+  { key: "patientPaid", label: "Patient Paid", color: "#0284c7", showDots: false },
+  { key: "currentArBalance", label: "Current AR Balance", color: "#dc2626", showDots: false },
+];
+
 function colorForTherapyClass(therapyClass) {
   return THERAPY_CLASS_COLORS[therapyClass] || "#64748b";
 }
@@ -519,22 +527,39 @@ export default function HomeInfusionRevenueDashboard() {
 
   useEffect(() => {
     if (lineRows.length > 0) return;
+    const targetFileName = "home_infusion_claims_2025_FINAL_clean.csv";
     const targetCsvEntry = Object.entries(csvModuleLoaders).find(([key]) =>
-      key.endsWith("home_infusion_claims_2025_FINAL_clean.csv")
+      key.toLowerCase().endsWith(targetFileName.toLowerCase())
     );
-    if (!targetCsvEntry) return;
 
-    targetCsvEntry[1]()
-      .then((rawCsv) => {
-        Papa.parse(rawCsv, {
-          header: true,
-          skipEmptyLines: true,
-          complete: (results) => {
-            const parsed = parseCsvRows(results.data || []);
-            setLineRows(parsed);
-            setFileName("home_infusion_claims_2025_FINAL_clean.csv (preloaded)");
-          },
+    const parseAndSetCsv = (rawCsv, loadedAs) => {
+      Papa.parse(rawCsv, {
+        header: true,
+        skipEmptyLines: true,
+        complete: (results) => {
+          const parsed = parseCsvRows(results.data || []);
+          if (!parsed.length) return;
+          setLineRows(parsed);
+          setFileName(`${loadedAs} (preloaded)`);
+        },
+      });
+    };
+
+    if (targetCsvEntry) {
+      targetCsvEntry[1]()
+        .then((rawCsv) => parseAndSetCsv(rawCsv, targetFileName))
+        .catch(() => {
+          // Keep manual CSV upload available if preload fails.
         });
+      return;
+    }
+
+    // Fallback: support file placed in /public for GitHub Pages deployments.
+    fetch(`${import.meta.env.BASE_URL}${targetFileName}`)
+      .then((res) => (res.ok ? res.text() : ""))
+      .then((rawCsv) => {
+        if (!rawCsv) return;
+        parseAndSetCsv(rawCsv, targetFileName);
       })
       .catch(() => {
         // Keep manual CSV upload available if preload fails.
@@ -1074,22 +1099,50 @@ export default function HomeInfusionRevenueDashboard() {
                   <CartesianGrid strokeDasharray="3 3" stroke="#cbd5e1" />
                   <XAxis dataKey="monthLabel" />
                   <YAxis width={90} tickFormatter={(v) => compactCurrency.format(v)} />
-                  <Tooltip formatter={(v) => currency.format(v)} />
-                  <Legend />
-                  <Line
-                    type="monotone"
-                    dataKey="expected"
-                    name="Expected (Allowed Amount)"
-                    stroke="#4f46e5"
-                    strokeWidth={2.5}
-                    dot={{ r: 3 }}
-                    activeDot={{ r: 6 }}
-                    onClick={(point) => setSelectedViz((p) => ({ ...p, monthYear: p.monthYear === point.month ? null : point.month }))}
+                  <Tooltip
+                    content={({ active, payload, label }) => {
+                      if (!active || !payload?.length) return null;
+                      const ordered = MONTHLY_SERIES
+                        .map((series) => ({
+                          ...series,
+                          value: payload.find((item) => item.dataKey === series.key)?.value,
+                        }))
+                        .filter((item) => typeof item.value === "number");
+                      return (
+                        <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-xl">
+                          <div className="mb-2 font-semibold text-slate-900">{label}</div>
+                          <div className="space-y-1.5 text-sm">
+                            {ordered.map((item) => (
+                              <div key={item.key} style={{ color: item.color }}>
+                                {item.label}: <span className="font-semibold">{currency.format(item.value)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    }}
                   />
-                  <Line type="monotone" dataKey="insurerPaid" name="Insurer Paid" stroke="#059669" strokeWidth={2.5} dot={false} />
-                  <Line type="monotone" dataKey="patientResponsibility" name="Patient Responsibility" stroke="#f59e0b" strokeWidth={2.5} dot={false} />
-                  <Line type="monotone" dataKey="patientPaid" name="Patient Paid" stroke="#0284c7" strokeWidth={2.5} dot={false} />
-                  <Line type="monotone" dataKey="currentArBalance" name="Current AR Balance" stroke="#dc2626" strokeWidth={2.5} dot={false} />
+                  <Legend
+                    payload={MONTHLY_SERIES.map((series) => ({
+                      value: series.label,
+                      id: series.key,
+                      type: "line",
+                      color: series.color,
+                    }))}
+                  />
+                  {MONTHLY_SERIES.map((series) => (
+                    <Line
+                      key={series.key}
+                      type="monotone"
+                      dataKey={series.key}
+                      name={series.label}
+                      stroke={series.color}
+                      strokeWidth={2.5}
+                      dot={series.showDots ? { r: 3 } : false}
+                      activeDot={series.showDots ? { r: 6 } : false}
+                      onClick={(point) => setSelectedViz((p) => ({ ...p, monthYear: p.monthYear === point.month ? null : point.month }))}
+                    />
+                  ))}
                 </LineChart>
               </ResponsiveContainer>
             </div>
