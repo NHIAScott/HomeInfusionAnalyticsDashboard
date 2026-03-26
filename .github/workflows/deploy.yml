@@ -18,14 +18,14 @@ jobs:
   deploy:
     environment:
       name: github-pages
-      url: ${{ steps: deployment.outputs.page_url }}
+      url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Set up Node
-        uses: actions/use-node-setup@v4
+        uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: 'npm'
