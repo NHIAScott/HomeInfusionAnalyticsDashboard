@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Papa from "papaparse";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,11 +13,14 @@ import {
   ResponsiveContainer,
   ScatterChart,
   Scatter,
+  LineChart,
+  Line,
   XAxis,
   YAxis,
   ZAxis,
   CartesianGrid,
   Tooltip,
+  Legend,
   Cell,
 } from "recharts";
 
@@ -59,6 +62,22 @@ const dateFmt = (value) => {
   const d = new Date(value);
   return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString();
 };
+const monthFmt = new Intl.DateTimeFormat("en-US", { month: "short", year: "numeric" });
+
+function monthKey(value) {
+  if (!value) return "";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "";
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function monthLabel(value) {
+  if (!value) return "Unknown";
+  const [year, month] = value.split("-");
+  if (!year || !month) return value;
+  const d = new Date(Number(year), Number(month) - 1, 1);
+  return Number.isNaN(d.getTime()) ? value : monthFmt.format(d);
+}
 
 function asNum(v) {
   if (v === null || v === undefined || v === "") return 0;
@@ -195,6 +214,7 @@ function aggregateClaimGroups(lineRows) {
     return {
       ...g,
       code_list: Array.from(g.code_set).sort(),
+      service_month: monthKey(g.date_of_service),
       total_collections: g.paid_amount + g.patient_paid,
       clean_claim_rate_flag: g.first_pass_accepted,
       denial_rate_flag: g.initial_denial_flag,
@@ -463,6 +483,10 @@ function DetailTable({ rows, sortConfig, onSort }) {
 }
 
 export default function HomeInfusionRevenueDashboard() {
+  const csvModuleLoaders = useMemo(
+    () => import.meta.glob("./**/*.csv", { query: "?raw", import: "default" }),
+    []
+  );
   const [lineRows, setLineRows] = useState([]);
   const [fileName, setFileName] = useState("");
   const [search, setSearch] = useState("");
@@ -482,6 +506,7 @@ export default function HomeInfusionRevenueDashboard() {
     drugName: null,
     denialReason: null,
     arBucket: null,
+    monthYear: null,
   });
   const [activeTherapyClassLegend, setActiveTherapyClassLegend] = useState(null);
   const [hoveredTherapyClassLegend, setHoveredTherapyClassLegend] = useState(null);
@@ -492,7 +517,31 @@ export default function HomeInfusionRevenueDashboard() {
   const claimGroups = useMemo(() => aggregateClaimGroups(lineRows), [lineRows]);
   const options = useOptions(claimGroups);
 
-  const filtered = useMemo(() => {
+  useEffect(() => {
+    if (lineRows.length > 0) return;
+    const targetCsvEntry = Object.entries(csvModuleLoaders).find(([key]) =>
+      key.endsWith("home_infusion_claims_2025_FINAL_clean.csv")
+    );
+    if (!targetCsvEntry) return;
+
+    targetCsvEntry[1]()
+      .then((rawCsv) => {
+        Papa.parse(rawCsv, {
+          header: true,
+          skipEmptyLines: true,
+          complete: (results) => {
+            const parsed = parseCsvRows(results.data || []);
+            setLineRows(parsed);
+            setFileName("home_infusion_claims_2025_FINAL_clean.csv (preloaded)");
+          },
+        });
+      })
+      .catch(() => {
+        // Keep manual CSV upload available if preload fails.
+      });
+  }, [csvModuleLoaders, lineRows.length]);
+
+  const filteredBase = useMemo(() => {
     return claimGroups.filter((g) => {
       if (filters.dateStart && new Date(g.date_of_service) < new Date(filters.dateStart)) return false;
       if (filters.dateEnd && new Date(g.date_of_service) > new Date(filters.dateEnd)) return false;
@@ -523,7 +572,12 @@ export default function HomeInfusionRevenueDashboard() {
       }
       return true;
     });
-  }, [claimGroups, filters, selectedViz, search]);
+  }, [claimGroups, filters, selectedViz.arBucket, selectedViz.denialReason, selectedViz.drugName, selectedViz.payor, selectedViz.therapyClass, search]);
+
+  const filtered = useMemo(() => {
+    if (!selectedViz.monthYear) return filteredBase;
+    return filteredBase.filter((g) => g.service_month === selectedViz.monthYear);
+  }, [filteredBase, selectedViz.monthYear]);
 
   const openArRows = useMemo(() => filtered.filter((g) => g.current_ar_balance > 0), [filtered]);
 
@@ -695,6 +749,31 @@ export default function HomeInfusionRevenueDashboard() {
 
   const emphasizedTherapyClass = hoveredTherapyClassLegend || activeTherapyClassLegend;
 
+  const monthlyTrend = useMemo(() => {
+    const byMonth = new Map();
+    filteredBase.forEach((g) => {
+      if (!g.service_month) return;
+      if (!byMonth.has(g.service_month)) {
+        byMonth.set(g.service_month, {
+          month: g.service_month,
+          monthLabel: monthLabel(g.service_month),
+          expected: 0,
+          insurerPaid: 0,
+          patientResponsibility: 0,
+          patientPaid: 0,
+          currentArBalance: 0,
+        });
+      }
+      const row = byMonth.get(g.service_month);
+      row.expected += g.allowed_amount;
+      row.insurerPaid += g.paid_amount;
+      row.patientResponsibility += g.patient_responsibility;
+      row.patientPaid += g.patient_paid;
+      row.currentArBalance += g.current_ar_balance;
+    });
+    return Array.from(byMonth.values()).sort((a, b) => a.month.localeCompare(b.month));
+  }, [filteredBase]);
+
   const handleFile = (file) => {
     if (!file) return;
     Papa.parse(file, {
@@ -721,7 +800,7 @@ export default function HomeInfusionRevenueDashboard() {
 
   const clearAll = () => {
     setFilters({ dateStart: "", dateEnd: "", payors: [], therapyClasses: [], drugNames: [], codes: [], denialReasons: [], claimStatuses: [] });
-    setSelectedViz({ payor: null, therapyClass: null, drugName: null, denialReason: null, arBucket: null });
+    setSelectedViz({ payor: null, therapyClass: null, drugName: null, denialReason: null, arBucket: null, monthYear: null });
     setSearch("");
   };
 
@@ -982,12 +1061,83 @@ export default function HomeInfusionRevenueDashboard() {
         <Card className="rounded-[28px] border-0 bg-white/90 shadow-[0_12px_40px_rgba(15,23,42,0.08)] backdrop-blur">
           <CardHeader>
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <CardTitle className="text-lg">Monthly Financial Trend</CardTitle>
+              <div className="text-sm text-slate-500">
+                Click a month in the chart or table to filter Master Detail{selectedViz.monthYear ? ` · active: ${monthLabel(selectedViz.monthYear)}` : ""}
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="h-[380px] rounded-2xl border border-slate-200 bg-white p-3">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={monthlyTrend} margin={{ top: 8, right: 24, left: 16, bottom: 8 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#cbd5e1" />
+                  <XAxis dataKey="monthLabel" />
+                  <YAxis width={90} tickFormatter={(v) => compactCurrency.format(v)} />
+                  <Tooltip formatter={(v) => currency.format(v)} />
+                  <Legend />
+                  <Line
+                    type="monotone"
+                    dataKey="expected"
+                    name="Expected (Allowed Amount)"
+                    stroke="#4f46e5"
+                    strokeWidth={2.5}
+                    dot={{ r: 3 }}
+                    activeDot={{ r: 6 }}
+                    onClick={(point) => setSelectedViz((p) => ({ ...p, monthYear: p.monthYear === point.month ? null : point.month }))}
+                  />
+                  <Line type="monotone" dataKey="insurerPaid" name="Insurer Paid" stroke="#059669" strokeWidth={2.5} dot={false} />
+                  <Line type="monotone" dataKey="patientResponsibility" name="Patient Responsibility" stroke="#f59e0b" strokeWidth={2.5} dot={false} />
+                  <Line type="monotone" dataKey="patientPaid" name="Patient Paid" stroke="#0284c7" strokeWidth={2.5} dot={false} />
+                  <Line type="monotone" dataKey="currentArBalance" name="Current AR Balance" stroke="#dc2626" strokeWidth={2.5} dot={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+            <ScrollArea className="h-[180px] rounded-2xl border border-slate-200 bg-white">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-slate-50/80">
+                    <TableHead>Month</TableHead>
+                    <TableHead className="text-right">Expected</TableHead>
+                    <TableHead className="text-right">Insurer Paid</TableHead>
+                    <TableHead className="text-right">Patient Responsibility</TableHead>
+                    <TableHead className="text-right">Patient Paid</TableHead>
+                    <TableHead className="text-right">Current AR Balance</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {monthlyTrend.map((row) => {
+                    const active = selectedViz.monthYear === row.month;
+                    return (
+                      <TableRow
+                        key={row.month}
+                        className={`cursor-pointer ${active ? "bg-slate-100" : "hover:bg-slate-50"}`}
+                        onClick={() => setSelectedViz((p) => ({ ...p, monthYear: p.monthYear === row.month ? null : row.month }))}
+                      >
+                        <TableCell className="font-medium">{row.monthLabel}</TableCell>
+                        <TableCell className="text-right">{currency.format(row.expected)}</TableCell>
+                        <TableCell className="text-right">{currency.format(row.insurerPaid)}</TableCell>
+                        <TableCell className="text-right">{currency.format(row.patientResponsibility)}</TableCell>
+                        <TableCell className="text-right">{currency.format(row.patientPaid)}</TableCell>
+                        <TableCell className="text-right">{currency.format(row.currentArBalance)}</TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </ScrollArea>
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-[28px] border-0 bg-white/90 shadow-[0_12px_40px_rgba(15,23,42,0.08)] backdrop-blur">
+          <CardHeader>
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <CardTitle className="text-lg">Master Detail Table</CardTitle>
               <div className="flex flex-wrap gap-2">
                 {Object.entries(selectedViz).map(([key, value]) =>
                   value ? (
                     <Badge key={key} variant="secondary" className="gap-1 rounded-full px-3 py-1">
-                      {key}: {value}
+                      {key}: {key === "monthYear" ? monthLabel(value) : value}
                       <button onClick={() => setSelectedViz((p) => ({ ...p, [key]: null }))}>
                         <X className="h-3 w-3" />
                       </button>
